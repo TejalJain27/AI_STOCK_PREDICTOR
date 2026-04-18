@@ -61,23 +61,6 @@ ax.legend()
 st.pyplot(fig)
 
 # -------------------------------
-# Compare Stocks
-# -------------------------------
-st.subheader("📊 Compare Stocks")
-
-compare = st.checkbox("Compare with other stocks")
-
-if compare:
-    compare_stocks = st.multiselect(
-        "Select stocks to compare",
-        list(stock_dict.keys()),
-        default=["TCS"]
-    )
-
-    comp_data = yf.download([stock_dict[s] for s in compare_stocks], period="1y")['Close']
-    st.line_chart(comp_data)
-
-# -------------------------------
 # ML Model
 # -------------------------------
 data['Prediction'] = data['Close'].shift(-1)
@@ -124,22 +107,18 @@ def run_dashboard():
         # -------------------------------
         try:
             current_price = latest['Close']
-
             if hasattr(current_price, "values"):
                 current_price = current_price.values[0]
-
             if current_price is None or np.isnan(current_price):
                 st.warning("Live price not available yet")
                 return
-
             current_price = float(current_price)
-
         except:
             st.warning("Error reading live price")
             return
 
         # -------------------------------
-        # FEATURES + PREDICTION
+        # PREDICTION
         # -------------------------------
         try:
             latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
@@ -166,31 +145,60 @@ def run_dashboard():
             st.error("Sell Signal ⚠")
 
         # -------------------------------
-        # ✅ FINAL FIXED GRAPH
+        # 🔥 FINAL GRAPH (FIXED + COLORED)
         # -------------------------------
         st.subheader("📉 Live Price Trend")
 
         try:
-            live_df = live_data.reset_index()
+            # Flatten MultiIndex if present
+            if hasattr(live_data.columns, "levels"):
+                live_data.columns = [col[0] for col in live_data.columns]
 
-            # detect time column automatically
-            time_col = live_df.columns[0]
-            live_df.set_index(time_col, inplace=True)
+            if 'Close' not in live_data.columns:
+                raise Exception("Close column missing")
 
-            # detect price column automatically
-            price_col = live_df.columns[0]
+            clean_data = live_data['Close'].dropna()
 
-            if live_df[price_col].dropna().empty:
-                st.warning("No live data — showing last 5 days")
-                fallback = yf.download(ticker, period="5d")
-                st.line_chart(fallback['Close'])
+            if clean_data.empty:
+                raise Exception("No live data")
+
+            # 🔥 Trend color logic
+            if clean_data.iloc[-1] > clean_data.iloc[0]:
+                color = "green"
+                st.success("📈 Uptrend")
             else:
-                st.line_chart(live_df[price_col])
+                color = "red"
+                st.error("📉 Downtrend")
+
+            # Plot using matplotlib for color control
+            fig2, ax2 = plt.subplots()
+            ax2.plot(clean_data.index, clean_data.values, color=color)
+            ax2.set_title("Live Price Trend")
+            ax2.set_xlabel("Time")
+            ax2.set_ylabel("Price")
+
+            st.pyplot(fig2)
 
         except:
-            st.warning("Graph error, showing fallback")
+            st.warning("Live data unavailable — showing last 5 days")
+
             fallback = yf.download(ticker, period="5d")
-            st.line_chart(fallback['Close'])
+
+            fb = fallback['Close'].dropna()
+
+            if not fb.empty:
+                if fb.iloc[-1] > fb.iloc[0]:
+                    color = "green"
+                    st.success("📈 Uptrend (Last 5 Days)")
+                else:
+                    color = "red"
+                    st.error("📉 Downtrend (Last 5 Days)")
+
+                fig3, ax3 = plt.subplots()
+                ax3.plot(fb.index, fb.values, color=color)
+                ax3.set_title("Last 5 Days Trend")
+
+                st.pyplot(fig3)
 
         st.caption(f"Last updated: {latest.name}")
 
