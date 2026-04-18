@@ -2,6 +2,8 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import time
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
@@ -28,37 +30,38 @@ ticker = stock_dict[selected_stock]
 # -------------------------------
 @st.cache_data
 def load_data(ticker):
-    data = yf.download(ticker, start="2020-01-01", end="2024-01-01")
-    return data
+    return yf.download(ticker, period="5y")
 
 data = load_data(ticker)
 
-if data.empty:
+if data is None or data.empty:
     st.error("No data found.")
     st.stop()
 
 # -------------------------------
-# Show Data
+# Historical Data
 # -------------------------------
 st.subheader("📊 Historical Data")
 st.dataframe(data.tail())
 
 # -------------------------------
-# Plot Graph
+# Candlestick Chart
 # -------------------------------
-st.subheader("📉 Stock Price Chart")
+st.subheader("🕯️ Candlestick Chart")
 
-fig, ax = plt.subplots()
-ax.plot(data['Close'], label="Closing Price")
-ax.set_title("Stock Closing Price")
-ax.set_xlabel("Date")
-ax.set_ylabel("Price")
-ax.legend()
+fig_candle = go.Figure(data=[go.Candlestick(
+    x=data.index,
+    open=data['Open'],
+    high=data['High'],
+    low=data['Low'],
+    close=data['Close']
+)])
 
-st.pyplot(fig)
+fig_candle.update_layout(height=400)
+st.plotly_chart(fig_candle, use_container_width=True)
 
 # -------------------------------
-# Prepare ML Model
+# ML Model
 # -------------------------------
 data['Prediction'] = data['Close'].shift(-1)
 data = data.dropna()
@@ -79,29 +82,65 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
-# Live Prediction
+# ⚡ LIVE DASHBOARD
 # -------------------------------
-st.subheader("⚡ Live Prediction")
+st.subheader("⚡ Live Dashboard")
 
-if st.button("Get Live Prediction"):
+auto_refresh = st.checkbox("🔄 Auto Refresh (10 sec)", value=True)
 
-    live_data = yf.download(ticker, period="1d", interval="1m")
+placeholder = st.empty()
 
-    if live_data.empty:
-        st.error("No live data available")
-    else:
+def run_dashboard():
+    with placeholder.container():
+
+        with st.spinner("Fetching live data..."):
+            live_data = yf.download(ticker, period="1d", interval="1m")
+
+        if live_data is None or live_data.empty:
+            st.error("No live data available")
+            return
+
         latest = live_data.iloc[-1]
+
+        if latest[['Open','High','Low','Close','Volume']].isnull().any():
+            st.warning("Incomplete data, retrying...")
+            return
 
         latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
 
-        prediction = model.predict(latest_features)[0]
         current_price = float(latest['Close'])
+        prediction = float(model.predict(latest_features)[0])
 
-        st.write("### Current Price:", round(current_price, 2))
-        st.write("### Predicted Next Price:", round(prediction, 2))
+        # 📊 Metrics Row
+        col1, col2, col3 = st.columns(3)
 
-        # Buy/Sell Signal
-        if prediction > current_price:
-            st.success("📈 BUY Signal")
+        col1.metric("Current Price", f"₹ {round(current_price,2)}")
+        col2.metric("Predicted Price", f"₹ {round(prediction,2)}")
+
+        delta = prediction - current_price
+
+        if delta > 0:
+            col3.metric("Signal", "BUY 📈", f"+{round(delta,2)}")
+            st.success("Strong Buy Signal 🚀")
         else:
-            st.error("📉 SELL Signal")
+            col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
+            st.error("Sell Signal ⚠")
+
+        # 🟢🔴 Price movement indicator
+        st.write("### Price Movement")
+        st.progress(min(abs(delta) / current_price, 1.0))
+
+        # 📉 Live Chart
+        st.subheader("📉 Live Price Trend")
+        st.line_chart(live_data['Close'])
+
+        # 🕒 Timestamp
+        st.caption(f"Last updated: {latest.name}")
+
+# Run once
+run_dashboard()
+
+# Auto refresh safely
+if auto_refresh:
+    time.sleep(10)
+    st.rerun()
