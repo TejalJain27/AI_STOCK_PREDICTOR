@@ -49,7 +49,7 @@ st.dataframe(data.tail())
 # -------------------------------
 st.subheader("🕯️ Candlestick Chart")
 
-fig_candle = go.Figure(data=[go.Candlestick(
+fig = go.Figure(data=[go.Candlestick(
     x=data.index,
     open=data['Open'],
     high=data['High'],
@@ -57,8 +57,26 @@ fig_candle = go.Figure(data=[go.Candlestick(
     close=data['Close']
 )])
 
-fig_candle.update_layout(height=400)
-st.plotly_chart(fig_candle, use_container_width=True)
+fig.update_layout(height=400)
+st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------------
+# Multi-Stock Comparison (Feature)
+# -------------------------------
+st.subheader("📊 Compare Stocks")
+
+compare = st.checkbox("Compare with other stocks")
+
+if compare:
+    compare_stocks = st.multiselect(
+        "Select stocks to compare",
+        list(stock_dict.keys()),
+        default=["TCS"]
+    )
+
+    comp_data = yf.download([stock_dict[s] for s in compare_stocks], period="1y")['Close']
+
+    st.line_chart(comp_data)
 
 # -------------------------------
 # ML Model
@@ -82,11 +100,11 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
-# ⚡ LIVE DASHBOARD
+# ⚡ LIVE DASHBOARD (SAFE VERSION)
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
-auto_refresh = st.checkbox("🔄 Auto Refresh (10 sec)", value=True)
+auto_refresh = st.checkbox("🔄 Auto Refresh (10 sec)", value=False)
 
 placeholder = st.empty()
 
@@ -111,7 +129,6 @@ def run_dashboard():
         current_price = float(latest['Close'])
         prediction = float(model.predict(latest_features)[0])
 
-        # 📊 Metrics Row
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Current Price", f"₹ {round(current_price,2)}")
@@ -126,15 +143,9 @@ def run_dashboard():
             col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
             st.error("Sell Signal ⚠")
 
-        # 🟢🔴 Price movement indicator
-        st.write("### Price Movement")
-        st.progress(min(abs(delta) / current_price, 1.0))
-
-        # 📉 Live Chart
         st.subheader("📉 Live Price Trend")
         st.line_chart(live_data['Close'])
 
-        # 🕒 Timestamp
         st.caption(f"Last updated: {latest.name}")
 
 # Run once
@@ -143,4 +154,4 @@ run_dashboard()
 # Auto refresh safely
 if auto_refresh:
     time.sleep(10)
-    st.rerun()
+    st.experimental_rerun()
