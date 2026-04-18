@@ -118,8 +118,6 @@ def run_dashboard():
             return
 
         latest = live_data.iloc[-1]
-
-        # ✅ FIX 1: Safe current price
         try:
             current_price = latest['Close']
 
@@ -136,7 +134,6 @@ def run_dashboard():
             st.warning("Error reading live price")
             return
 
-        # Safe features
         try:
             latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
         except:
@@ -165,8 +162,6 @@ def run_dashboard():
             st.error("Sell Signal ⚠")
 
         # -------------------------------
-        # ✅ FIX 2: Graph fallback
-        # -------------------------------
         st.subheader("📉 Live Price Trend")
 
         if live_data['Close'].dropna().empty:
@@ -178,10 +173,7 @@ def run_dashboard():
 
         st.caption(f"Last updated: {latest.name}")
 
-# Run once
 run_dashboard()
-
-# Auto refresh
 if auto_refresh:
     time.sleep(10)
     st.experimental_rerun()
