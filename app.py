@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
-import time
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
@@ -47,7 +46,7 @@ st.subheader("📊 Historical Data")
 st.dataframe(data.tail())
 
 # -------------------------------
-# Line Chart
+# Price Chart
 # -------------------------------
 st.subheader("📉 Stock Price Chart")
 
@@ -59,6 +58,21 @@ ax.set_ylabel("Price")
 ax.legend()
 
 st.pyplot(fig)
+
+# -------------------------------
+# Compare Stocks (Simple)
+# -------------------------------
+st.subheader("📊 Compare Stocks")
+
+compare_stocks = st.multiselect(
+    "Select stocks to compare",
+    list(stock_dict.keys()),
+)
+
+if compare_stocks:
+    tickers = [stock_dict[s] for s in compare_stocks]
+    comp_data = yf.download(tickers, period="1y")['Close']
+    st.line_chart(comp_data)
 
 # -------------------------------
 # ML Model
@@ -86,126 +100,101 @@ st.write(round(accuracy, 4))
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
-auto_refresh = st.checkbox("🔄 Auto Refresh (10 sec)", value=False)
-
-placeholder = st.empty()
-
 def run_dashboard():
-    with placeholder.container():
+    with st.spinner("Fetching live data..."):
 
-        with st.spinner("Fetching live data..."):
-            live_data = yf.download(ticker, period="1d", interval="1m")
+        live_data = yf.download(ticker, period="1d", interval="1m")
 
-        if live_data is None or live_data.empty:
-            st.warning("Live data not available (market closed)")
+    if live_data is None or live_data.empty:
+        st.warning("Live data not available (market closed)")
+        return
+
+    latest = live_data.iloc[-1]
+
+    # Safe current price
+    try:
+        current_price = latest['Close']
+        if hasattr(current_price, "values"):
+            current_price = current_price.values[0]
+        if current_price is None or np.isnan(current_price):
+            st.warning("Live price not available yet")
             return
+        current_price = float(current_price)
+    except:
+        st.warning("Error reading live price")
+        return
 
-        latest = live_data.iloc[-1]
+    # Prediction
+    try:
+        latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+        prediction = float(model.predict(latest_features)[0])
+    except:
+        st.warning("Prediction failed")
+        return
 
-        # -------------------------------
-        # SAFE CURRENT PRICE
-        # -------------------------------
-        try:
-            current_price = latest['Close']
-            if hasattr(current_price, "values"):
-                current_price = current_price.values[0]
-            if current_price is None or np.isnan(current_price):
-                st.warning("Live price not available yet")
-                return
-            current_price = float(current_price)
-        except:
-            st.warning("Error reading live price")
-            return
+    # Display
+    col1, col2, col3 = st.columns(3)
 
-        # -------------------------------
-        # PREDICTION
-        # -------------------------------
-        try:
-            latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-            prediction = float(model.predict(latest_features)[0])
-        except:
-            st.warning("Prediction failed")
-            return
+    col1.metric("Current Price", f"₹ {round(current_price,2)}")
+    col2.metric("Predicted Price", f"₹ {round(prediction,2)}")
 
-        # -------------------------------
-        # DISPLAY
-        # -------------------------------
-        col1, col2, col3 = st.columns(3)
+    delta = prediction - current_price
 
-        col1.metric("Current Price", f"₹ {round(current_price,2)}")
-        col2.metric("Predicted Price", f"₹ {round(prediction,2)}")
+    if delta > 0:
+        col3.metric("Signal", "BUY 📈", f"+{round(delta,2)}")
+        st.success("Strong Buy Signal 🚀")
+    else:
+        col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
+        st.error("Sell Signal ⚠")
 
-        delta = prediction - current_price
+    # -------------------------------
+    # Trend Graph (Final Stable)
+    # -------------------------------
+    st.subheader("📉 Live Price Trend")
 
-        if delta > 0:
-            col3.metric("Signal", "BUY 📈", f"+{round(delta,2)}")
-            st.success("Strong Buy Signal 🚀")
+    try:
+        if hasattr(live_data.columns, "levels"):
+            live_data.columns = [col[0] for col in live_data.columns]
+
+        clean_data = live_data['Close'].dropna()
+
+        if clean_data.empty:
+            raise Exception("No live data")
+
+        # Trend color
+        if clean_data.iloc[-1] > clean_data.iloc[0]:
+            color = "green"
+            st.success("📈 Uptrend")
         else:
-            col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
-            st.error("Sell Signal ⚠")
+            color = "red"
+            st.error("📉 Downtrend")
 
-        # -------------------------------
-        # 🔥 FINAL GRAPH (FIXED + COLORED)
-        # -------------------------------
-        st.subheader("📉 Live Price Trend")
+        fig2, ax2 = plt.subplots()
+        ax2.plot(clean_data.index, clean_data.values, color=color)
+        ax2.set_title("Live Price Trend")
 
-        try:
-            # Flatten MultiIndex if present
-            if hasattr(live_data.columns, "levels"):
-                live_data.columns = [col[0] for col in live_data.columns]
+        st.pyplot(fig2)
 
-            if 'Close' not in live_data.columns:
-                raise Exception("Close column missing")
+    except:
+        st.warning("Showing last 5 days trend")
 
-            clean_data = live_data['Close'].dropna()
+        fallback = yf.download(ticker, period="5d")
+        fb = fallback['Close'].dropna()
 
-            if clean_data.empty:
-                raise Exception("No live data")
-
-            # 🔥 Trend color logic
-            if clean_data.iloc[-1] > clean_data.iloc[0]:
+        if not fb.empty:
+            if fb.iloc[-1] > fb.iloc[0]:
                 color = "green"
-                st.success("📈 Uptrend")
+                st.success("📈 Uptrend (5 days)")
             else:
                 color = "red"
-                st.error("📉 Downtrend")
+                st.error("📉 Downtrend (5 days)")
 
-            # Plot using matplotlib for color control
-            fig2, ax2 = plt.subplots()
-            ax2.plot(clean_data.index, clean_data.values, color=color)
-            ax2.set_title("Live Price Trend")
-            ax2.set_xlabel("Time")
-            ax2.set_ylabel("Price")
+            fig3, ax3 = plt.subplots()
+            ax3.plot(fb.index, fb.values, color=color)
+            st.pyplot(fig3)
 
-            st.pyplot(fig2)
-
-        except:
-            st.warning("Live data unavailable — showing last 5 days")
-
-            fallback = yf.download(ticker, period="5d")
-
-            fb = fallback['Close'].dropna()
-
-            if not fb.empty:
-                if fb.iloc[-1] > fb.iloc[0]:
-                    color = "green"
-                    st.success("📈 Uptrend (Last 5 Days)")
-                else:
-                    color = "red"
-                    st.error("📉 Downtrend (Last 5 Days)")
-
-                fig3, ax3 = plt.subplots()
-                ax3.plot(fb.index, fb.values, color=color)
-                ax3.set_title("Last 5 Days Trend")
-
-                st.pyplot(fig3)
-
-        st.caption(f"Last updated: {latest.name}")
-
-# Run once
-run_dashboard()
-
-# Auto refresh
-if auto_refresh:
-    time.sleep(10)
-    st.warning("Refreshing... please wait")
+# -------------------------------
+# 🔥 Manual Refresh Button (FINAL FIX)
+# -------------------------------
+if st.button("🔄 Refresh Data"):
+    run_dashboard()
