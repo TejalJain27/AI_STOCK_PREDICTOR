@@ -118,6 +118,10 @@ def run_dashboard():
             return
 
         latest = live_data.iloc[-1]
+
+        # -------------------------------
+        # SAFE CURRENT PRICE
+        # -------------------------------
         try:
             current_price = latest['Close']
 
@@ -134,19 +138,19 @@ def run_dashboard():
             st.warning("Error reading live price")
             return
 
+        # -------------------------------
+        # FEATURES + PREDICTION
+        # -------------------------------
         try:
             latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-        except:
-            st.warning("Incomplete live data")
-            return
-
-        # Prediction
-        try:
             prediction = float(model.predict(latest_features)[0])
         except:
             st.warning("Prediction failed")
             return
 
+        # -------------------------------
+        # DISPLAY
+        # -------------------------------
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Current Price", f"₹ {round(current_price,2)}")
@@ -162,26 +166,38 @@ def run_dashboard():
             st.error("Sell Signal ⚠")
 
         # -------------------------------
-st.subheader("📉 Live Price Trend")
+        # ✅ FINAL FIXED GRAPH
+        # -------------------------------
+        st.subheader("📉 Live Price Trend")
 
-# Reset index properly
-live_df = live_data.reset_index()
+        try:
+            live_df = live_data.reset_index()
 
-# Set Datetime as index
-live_df.set_index('Datetime', inplace=True)
+            # detect time column automatically
+            time_col = live_df.columns[0]
+            live_df.set_index(time_col, inplace=True)
 
-# Plot correct column
-if live_df.iloc[:, 0].dropna().empty:
-    st.warning("No live data — showing last 5 days")
-    fallback = yf.download(ticker, period="5d")
-    st.line_chart(fallback['Close'])
-else:
-    st.line_chart(live_df.iloc[:, 0])
+            # detect price column automatically
+            price_col = live_df.columns[0]
 
+            if live_df[price_col].dropna().empty:
+                st.warning("No live data — showing last 5 days")
+                fallback = yf.download(ticker, period="5d")
+                st.line_chart(fallback['Close'])
+            else:
+                st.line_chart(live_df[price_col])
+
+        except:
+            st.warning("Graph error, showing fallback")
+            fallback = yf.download(ticker, period="5d")
+            st.line_chart(fallback['Close'])
 
         st.caption(f"Last updated: {latest.name}")
 
+# Run once
 run_dashboard()
+
+# Auto refresh
 if auto_refresh:
     time.sleep(10)
     st.experimental_rerun()
