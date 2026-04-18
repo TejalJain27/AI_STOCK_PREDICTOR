@@ -164,12 +164,17 @@ def run_dashboard():
         # -------------------------------
         st.subheader("📉 Live Price Trend")
 
-        if live_data['Close'].dropna().empty:
+# Reset index properly
+        live_df = live_data.reset_index()
+
+# Set Datetime as index
+        live_df.set_index('Datetime', inplace=True)
+        if live_df.iloc[:, 0].dropna().empty:
             st.warning("No live data — showing last 5 days")
             fallback = yf.download(ticker, period="5d")
             st.line_chart(fallback['Close'])
         else:
-            st.line_chart(live_data['Close'])
+            st.line_chart(live_df.iloc[:, 0])
 
         st.caption(f"Last updated: {latest.name}")
 
