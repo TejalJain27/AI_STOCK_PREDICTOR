@@ -105,12 +105,12 @@ def get_best_stock():
 
     for name, tick in stock_dict.items():
         try:
-            data = yf.download(tick, period="1d", interval="1m")
+            df = yf.download(tick, period="1d", interval="1m")
 
-            if data is None or data.empty:
+            if df is None or df.empty:
                 continue
 
-            latest = data.iloc[-1]
+            latest = df.iloc[-1]
 
             current = latest['Close']
             if hasattr(current, "values"):
@@ -131,13 +131,22 @@ def get_best_stock():
         return None
 
     best = sorted(results, key=lambda x: x[3], reverse=True)[0]
+
+    if best[3] <= 0:
+        return "NO_GOOD_STOCK"
+
     return best
+
 
 if st.button("🔍 Find Best Stock"):
     best = get_best_stock()
 
-    if best is None:
+    if best == "NO_GOOD_STOCK":
+        st.warning("⚠ No stock is worth buying right now")
+
+    elif best is None:
         st.warning("Could not fetch data")
+
     else:
         name, current, predicted, profit = best
 
@@ -145,11 +154,7 @@ if st.button("🔍 Find Best Stock"):
         st.write(f"Current Price: ₹ {round(current,2)}")
         st.write(f"Predicted Price: ₹ {round(predicted,2)}")
         st.write(f"Expected Gain: ₹ {round(profit,2)}")
-
-        if profit > 0:
-            st.success("📈 Recommended to BUY")
-        else:
-            st.error("📉 Not recommended")
+        st.success("📈 Recommended to BUY")
 
 # -------------------------------
 # LIVE DASHBOARD
@@ -240,7 +245,9 @@ def run_dashboard():
             st.pyplot(fig3)
 
 # -------------------------------
-# Refresh Button
+# 🔥 AUTO LOAD + REFRESH
 # -------------------------------
+run_dashboard()  # Runs automatically on app load
+
 if st.button("🔄 Refresh Data"):
     run_dashboard()
