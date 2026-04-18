@@ -36,7 +36,6 @@ def load_data(ticker):
 
 data = load_data(ticker)
 
-# ✅ FIX 1: Handle None + empty
 if data is None or data.empty:
     st.error("No data found.")
     st.stop()
@@ -115,12 +114,12 @@ def run_dashboard():
             live_data = yf.download(ticker, period="1d", interval="1m")
 
         if live_data is None or live_data.empty:
-            st.error("No live data available")
+            st.warning("Live data not available (market closed)")
             return
 
         latest = live_data.iloc[-1]
 
-        # ✅ FIX 2: Safe current price extraction
+        # ✅ FIX 1: Safe current price
         try:
             current_price = latest['Close']
 
@@ -137,23 +136,20 @@ def run_dashboard():
             st.warning("Error reading live price")
             return
 
-        # Safe feature creation
+        # Safe features
         try:
             latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
         except:
             st.warning("Incomplete live data")
             return
 
-        # Safe prediction
+        # Prediction
         try:
             prediction = float(model.predict(latest_features)[0])
         except:
             st.warning("Prediction failed")
             return
 
-        # -------------------------------
-        # UI Display
-        # -------------------------------
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Current Price", f"₹ {round(current_price,2)}")
@@ -168,15 +164,24 @@ def run_dashboard():
             col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
             st.error("Sell Signal ⚠")
 
+        # -------------------------------
+        # ✅ FIX 2: Graph fallback
+        # -------------------------------
         st.subheader("📉 Live Price Trend")
-        st.line_chart(live_data['Close'])
+
+        if live_data['Close'].dropna().empty:
+            st.warning("No live data — showing last 5 days")
+            fallback = yf.download(ticker, period="5d")
+            st.line_chart(fallback['Close'])
+        else:
+            st.line_chart(live_data['Close'])
 
         st.caption(f"Last updated: {latest.name}")
 
 # Run once
 run_dashboard()
 
-# Auto refresh (SAFE)
+# Auto refresh
 if auto_refresh:
     time.sleep(10)
     st.experimental_rerun()
