@@ -60,7 +60,7 @@ ax.legend()
 st.pyplot(fig)
 
 # -------------------------------
-# Compare Stocks (Simple)
+# Compare Stocks
 # -------------------------------
 st.subheader("📊 Compare Stocks")
 
@@ -96,13 +96,68 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
+# 🏆 Top Recommended Stock
+# -------------------------------
+st.subheader("🏆 Top Recommended Stock")
+
+def get_best_stock():
+    results = []
+
+    for name, tick in stock_dict.items():
+        try:
+            data = yf.download(tick, period="1d", interval="1m")
+
+            if data is None or data.empty:
+                continue
+
+            latest = data.iloc[-1]
+
+            current = latest['Close']
+            if hasattr(current, "values"):
+                current = current.values[0]
+            current = float(current)
+
+            features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+            predicted = float(model.predict(features)[0])
+
+            profit = predicted - current
+
+            results.append((name, current, predicted, profit))
+
+        except:
+            continue
+
+    if not results:
+        return None
+
+    best = sorted(results, key=lambda x: x[3], reverse=True)[0]
+    return best
+
+if st.button("🔍 Find Best Stock"):
+    best = get_best_stock()
+
+    if best is None:
+        st.warning("Could not fetch data")
+    else:
+        name, current, predicted, profit = best
+
+        st.success(f"🏆 Best Stock: {name}")
+        st.write(f"Current Price: ₹ {round(current,2)}")
+        st.write(f"Predicted Price: ₹ {round(predicted,2)}")
+        st.write(f"Expected Gain: ₹ {round(profit,2)}")
+
+        if profit > 0:
+            st.success("📈 Recommended to BUY")
+        else:
+            st.error("📉 Not recommended")
+
+# -------------------------------
 # LIVE DASHBOARD
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
 def run_dashboard():
     with st.spinner("Fetching live data..."):
-
         live_data = yf.download(ticker, period="1d", interval="1m")
 
     if live_data is None or live_data.empty:
@@ -111,28 +166,22 @@ def run_dashboard():
 
     latest = live_data.iloc[-1]
 
-    # Safe current price
     try:
         current_price = latest['Close']
         if hasattr(current_price, "values"):
             current_price = current_price.values[0]
-        if current_price is None or np.isnan(current_price):
-            st.warning("Live price not available yet")
-            return
         current_price = float(current_price)
     except:
-        st.warning("Error reading live price")
+        st.warning("Error reading price")
         return
 
-    # Prediction
     try:
-        latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-        prediction = float(model.predict(latest_features)[0])
+        features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+        prediction = float(model.predict(features)[0])
     except:
         st.warning("Prediction failed")
         return
 
-    # Display
     col1, col2, col3 = st.columns(3)
 
     col1.metric("Current Price", f"₹ {round(current_price,2)}")
@@ -148,7 +197,7 @@ def run_dashboard():
         st.error("Sell Signal ⚠")
 
     # -------------------------------
-    # Trend Graph (Final Stable)
+    # Trend Graph
     # -------------------------------
     st.subheader("📉 Live Price Trend")
 
@@ -156,23 +205,20 @@ def run_dashboard():
         if hasattr(live_data.columns, "levels"):
             live_data.columns = [col[0] for col in live_data.columns]
 
-        clean_data = live_data['Close'].dropna()
+        clean = live_data['Close'].dropna()
 
-        if clean_data.empty:
-            raise Exception("No live data")
+        if clean.empty:
+            raise Exception
 
-        # Trend color
-        if clean_data.iloc[-1] > clean_data.iloc[0]:
-            color = "green"
+        color = "green" if clean.iloc[-1] > clean.iloc[0] else "red"
+
+        if color == "green":
             st.success("📈 Uptrend")
         else:
-            color = "red"
             st.error("📉 Downtrend")
 
         fig2, ax2 = plt.subplots()
-        ax2.plot(clean_data.index, clean_data.values, color=color)
-        ax2.set_title("Live Price Trend")
-
+        ax2.plot(clean.index, clean.values, color=color)
         st.pyplot(fig2)
 
     except:
@@ -182,11 +228,11 @@ def run_dashboard():
         fb = fallback['Close'].dropna()
 
         if not fb.empty:
-            if fb.iloc[-1] > fb.iloc[0]:
-                color = "green"
+            color = "green" if fb.iloc[-1] > fb.iloc[0] else "red"
+
+            if color == "green":
                 st.success("📈 Uptrend (5 days)")
             else:
-                color = "red"
                 st.error("📉 Downtrend (5 days)")
 
             fig3, ax3 = plt.subplots()
@@ -194,7 +240,7 @@ def run_dashboard():
             st.pyplot(fig3)
 
 # -------------------------------
-# 🔥 Manual Refresh Button (FINAL FIX)
+# Refresh Button
 # -------------------------------
 if st.button("🔄 Refresh Data"):
     run_dashboard()
