@@ -208,4 +208,4 @@ run_dashboard()
 # Auto refresh
 if auto_refresh:
     time.sleep(10)
-    st.experimental_rerun()
+    st.warning("Refreshing... please wait")
