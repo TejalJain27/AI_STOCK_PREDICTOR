@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
 import time
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
@@ -30,10 +29,14 @@ ticker = stock_dict[selected_stock]
 # -------------------------------
 @st.cache_data
 def load_data(ticker):
-    return yf.download(ticker, period="5y")
+    try:
+        return yf.download(ticker, period="5y")
+    except:
+        return None
 
 data = load_data(ticker)
 
+# ✅ FIX 1: Handle None + empty
 if data is None or data.empty:
     st.error("No data found.")
     st.stop()
@@ -45,23 +48,21 @@ st.subheader("📊 Historical Data")
 st.dataframe(data.tail())
 
 # -------------------------------
-# Candlestick Chart
+# Line Chart
 # -------------------------------
-st.subheader("🕯️ Candlestick Chart")
+st.subheader("📉 Stock Price Chart")
 
-fig = go.Figure(data=[go.Candlestick(
-    x=data.index,
-    open=data['Open'],
-    high=data['High'],
-    low=data['Low'],
-    close=data['Close']
-)])
+fig, ax = plt.subplots()
+ax.plot(data['Close'], label="Closing Price")
+ax.set_title("Stock Closing Price")
+ax.set_xlabel("Date")
+ax.set_ylabel("Price")
+ax.legend()
 
-fig.update_layout(height=400)
-st.plotly_chart(fig, use_container_width=True)
+st.pyplot(fig)
 
 # -------------------------------
-# Multi-Stock Comparison (Feature)
+# Compare Stocks
 # -------------------------------
 st.subheader("📊 Compare Stocks")
 
@@ -75,7 +76,6 @@ if compare:
     )
 
     comp_data = yf.download([stock_dict[s] for s in compare_stocks], period="1y")['Close']
-
     st.line_chart(comp_data)
 
 # -------------------------------
@@ -100,7 +100,7 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
-# ⚡ LIVE DASHBOARD (SAFE VERSION)
+# LIVE DASHBOARD
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
@@ -120,15 +120,40 @@ def run_dashboard():
 
         latest = live_data.iloc[-1]
 
-        if latest[['Open','High','Low','Close','Volume']].isnull().any():
-            st.warning("Incomplete data, retrying...")
+        # ✅ FIX 2: Safe current price extraction
+        try:
+            current_price = latest['Close']
+
+            if hasattr(current_price, "values"):
+                current_price = current_price.values[0]
+
+            if current_price is None or np.isnan(current_price):
+                st.warning("Live price not available yet")
+                return
+
+            current_price = float(current_price)
+
+        except:
+            st.warning("Error reading live price")
             return
 
-        latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+        # Safe feature creation
+        try:
+            latest_features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+        except:
+            st.warning("Incomplete live data")
+            return
 
-        current_price = float(latest['Close'])
-        prediction = float(model.predict(latest_features)[0])
+        # Safe prediction
+        try:
+            prediction = float(model.predict(latest_features)[0])
+        except:
+            st.warning("Prediction failed")
+            return
 
+        # -------------------------------
+        # UI Display
+        # -------------------------------
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Current Price", f"₹ {round(current_price,2)}")
@@ -151,7 +176,7 @@ def run_dashboard():
 # Run once
 run_dashboard()
 
-# Auto refresh safely
+# Auto refresh (SAFE)
 if auto_refresh:
     time.sleep(10)
     st.experimental_rerun()
