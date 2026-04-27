@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
@@ -51,12 +52,13 @@ st.dataframe(data.tail())
 st.subheader("📉 Stock Price Chart")
 
 fig, ax = plt.subplots()
-ax.plot(data['Close'], label="Closing Price")
-ax.legend()
+ax.plot(data['Close'], linewidth=2)
+ax.set_title("Closing Price")
+plt.tight_layout()
 st.pyplot(fig)
 
 # -------------------------------
-# 📊 Compare Stocks (FIXED)
+# Compare Stocks
 # -------------------------------
 st.subheader("📊 Compare Stocks")
 
@@ -103,7 +105,7 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
-# 🏆 Top Recommended Stock (FIXED)
+# Top Recommended Stock
 # -------------------------------
 st.subheader("🏆 Top Recommended Stock")
 
@@ -119,14 +121,9 @@ def get_best_stock():
 
             latest = df.iloc[-1]
 
-            current = latest['Close']
-            if hasattr(current, "values"):
-                current = current.values[0]
-            current = float(current)
-
+            current = float(latest['Close'])
             features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-            prediction = model.predict(features)
-            prediction = float(prediction[0])
+            prediction = float(model.predict(features)[0])
 
             profit = prediction - current
             results.append((name, current, prediction, profit))
@@ -163,7 +160,7 @@ if st.button("🔍 Find Best Stock"):
         st.write(f"Expected Gain: ₹ {round(profit,2)}")
 
 # -------------------------------
-# ⚡ Live Dashboard (FIXED)
+# Live Dashboard
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
@@ -176,15 +173,9 @@ def run_dashboard():
 
     latest = live_data.iloc[-1]
 
-    # FIX: Safe float conversion
-    current_price = latest['Close']
-    if hasattr(current_price, "values"):
-        current_price = current_price.values[0]
-    current_price = float(current_price)
-
+    current_price = float(latest['Close'])
     features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-    prediction = model.predict(features)
-    prediction = float(prediction[0])
+    prediction = float(model.predict(features)[0])
 
     st.write("### Current Price:", round(current_price, 2))
     st.write("### Predicted Price:", round(prediction, 2))
@@ -195,33 +186,36 @@ def run_dashboard():
         st.error("📉 SELL Signal")
 
     # -------------------------------
-    # 📉 Trend (FIXED)
+    # CLEAN TREND GRAPH (FIXED UI)
     # -------------------------------
     st.subheader("📉 Trend")
 
     close = live_data['Close'].dropna()
 
-    # FIX: Convert to scalar safely
-    last = close.iloc[-1]
-    first = close.iloc[0]
-
-    if hasattr(last, "values"):
-        last = last.values[0]
-    if hasattr(first, "values"):
-        first = first.values[0]
+    last = float(close.iloc[-1])
+    first = float(close.iloc[0])
 
     color = "green" if last > first else "red"
 
-    values = close.values
-    if len(values.shape) > 1:
-        values = values.flatten()
-
     fig2, ax2 = plt.subplots()
-    ax2.plot(close.index, values, color=color)
+    ax2.plot(close.index, close.values, color=color, linewidth=2)
+
+    # ✅ Clean date formatting
+    ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
+
+    plt.xticks(rotation=45)
+
+    ax2.set_title("Price Trend")
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Price")
+
+    plt.tight_layout()
+
     st.pyplot(fig2)
 
 # -------------------------------
-# AUTO LOAD + REFRESH
+# Run Dashboard
 # -------------------------------
 run_dashboard()
 
