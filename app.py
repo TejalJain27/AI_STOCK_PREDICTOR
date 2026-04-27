@@ -24,20 +24,33 @@ selected_stock = st.selectbox("Select Stock", list(stock_dict.keys()))
 ticker = stock_dict[selected_stock]
 
 # -------------------------------
-# Load Data
+# Load Data (FIXED)
 # -------------------------------
 @st.cache_data
 def load_data(ticker):
     try:
-        return yf.download(ticker, period="5y")
+        data = yf.download(ticker, period="5y", progress=False)
+
+        # 🔁 fallback if empty
+        if data is None or data.empty:
+            data = yf.download(ticker, start="2020-01-01", progress=False)
+
+        return data
     except:
         return None
 
+
 data = load_data(ticker)
 
+# ✅ Improved handling (NO sudden stop)
 if data is None or data.empty:
-    st.error("No data found.")
-    st.stop()
+    st.warning("⚠ Unable to fetch data. Trying fallback...")
+
+    data = yf.download(ticker, period="1y", progress=False)
+
+    if data is None or data.empty:
+        st.error("❌ Data not available. Try another stock or refresh.")
+        st.stop()
 
 # -------------------------------
 # Historical Data
@@ -60,7 +73,7 @@ ax.legend()
 st.pyplot(fig)
 
 # -------------------------------
-# Compare Stocks
+# Compare Stocks (FIXED)
 # -------------------------------
 st.subheader("📊 Compare Stocks")
 
@@ -71,8 +84,16 @@ compare_stocks = st.multiselect(
 
 if compare_stocks:
     tickers = [stock_dict[s] for s in compare_stocks]
-    comp_data = yf.download(tickers, period="1y")['Close']
-    st.line_chart(comp_data)
+    comp_data = yf.download(tickers, period="1y", progress=False)
+
+    if comp_data is not None and not comp_data.empty:
+        try:
+            comp_data = comp_data['Close']
+        except:
+            pass
+        st.line_chart(comp_data)
+    else:
+        st.warning("Comparison data not available")
 
 # -------------------------------
 # ML Model
@@ -112,16 +133,11 @@ def get_best_stock():
 
             latest = df.iloc[-1]
 
-            current = latest['Close']
-            if hasattr(current, "values"):
-                current = current.values[0]
-            current = float(current)
-
+            current = float(latest['Close'])
             features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
             predicted = float(model.predict(features)[0])
 
             profit = predicted - current
-
             results.append((name, current, predicted, profit))
 
         except:
@@ -162,8 +178,7 @@ if st.button("🔍 Find Best Stock"):
 st.subheader("⚡ Live Dashboard")
 
 def run_dashboard():
-    with st.spinner("Fetching live data..."):
-        live_data = yf.download(ticker, period="1d", interval="1m")
+    live_data = yf.download(ticker, period="1d", interval="1m")
 
     if live_data is None or live_data.empty:
         st.warning("Live data not available (market closed)")
@@ -171,21 +186,9 @@ def run_dashboard():
 
     latest = live_data.iloc[-1]
 
-    try:
-        current_price = latest['Close']
-        if hasattr(current_price, "values"):
-            current_price = current_price.values[0]
-        current_price = float(current_price)
-    except:
-        st.warning("Error reading price")
-        return
-
-    try:
-        features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-        prediction = float(model.predict(features)[0])
-    except:
-        st.warning("Prediction failed")
-        return
+    current_price = float(latest['Close'])
+    features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
+    prediction = float(model.predict(features)[0])
 
     col1, col2, col3 = st.columns(3)
 
@@ -201,26 +204,13 @@ def run_dashboard():
         col3.metric("Signal", "SELL 📉", f"{round(delta,2)}")
         st.error("Sell Signal ⚠")
 
-    # -------------------------------
     # Trend Graph
-    # -------------------------------
     st.subheader("📉 Live Price Trend")
 
     try:
-        if hasattr(live_data.columns, "levels"):
-            live_data.columns = [col[0] for col in live_data.columns]
-
         clean = live_data['Close'].dropna()
 
-        if clean.empty:
-            raise Exception
-
         color = "green" if clean.iloc[-1] > clean.iloc[0] else "red"
-
-        if color == "green":
-            st.success("📈 Uptrend")
-        else:
-            st.error("📉 Downtrend")
 
         fig2, ax2 = plt.subplots()
         ax2.plot(clean.index, clean.values, color=color)
@@ -228,26 +218,20 @@ def run_dashboard():
 
     except:
         st.warning("Showing last 5 days trend")
-
         fallback = yf.download(ticker, period="5d")
-        fb = fallback['Close'].dropna()
-
-        if not fb.empty:
-            color = "green" if fb.iloc[-1] > fb.iloc[0] else "red"
-
-            if color == "green":
-                st.success("📈 Uptrend (5 days)")
-            else:
-                st.error("📉 Downtrend (5 days)")
-
-            fig3, ax3 = plt.subplots()
-            ax3.plot(fb.index, fb.values, color=color)
-            st.pyplot(fig3)
+        st.line_chart(fallback['Close'])
 
 # -------------------------------
-# 🔥 AUTO LOAD + REFRESH
+# AUTO LOAD + REFRESH
 # -------------------------------
-run_dashboard()  # Runs automatically on app load
+run_dashboard()
 
 if st.button("🔄 Refresh Data"):
     run_dashboard()
+
+# -------------------------------
+# Cache Clear Button (NEW)
+# -------------------------------
+if st.button("🧹 Clear Cache"):
+    st.cache_data.clear()
+    st.success("Cache cleared! Refresh app.")
