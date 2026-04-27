@@ -121,9 +121,14 @@ def get_best_stock():
 
             latest = df.iloc[-1]
 
-            current = float(latest['Close'])
+            current_price = latest['Close']
+            try:
+                current_price = float(current_price)
+            except:
+                    current_price = float(current_price.values[0])
             features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-            prediction = float(model.predict(features)[0])
+            prediction = model.predict(features)
+            prediction = float(prediction[0])
 
             profit = prediction - current
             results.append((name, current, prediction, profit))
