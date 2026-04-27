@@ -24,7 +24,7 @@ selected_stock = st.selectbox("Select Stock", list(stock_dict.keys()))
 ticker = stock_dict[selected_stock]
 
 # -------------------------------
-# Load Data (Stable)
+# Load Data
 # -------------------------------
 @st.cache_data
 def load_data(ticker):
@@ -54,6 +54,34 @@ fig, ax = plt.subplots()
 ax.plot(data['Close'], label="Closing Price")
 ax.legend()
 st.pyplot(fig)
+
+# -------------------------------
+# 📊 Compare Stocks (FIXED)
+# -------------------------------
+st.subheader("📊 Compare Stocks")
+
+compare_stocks = st.multiselect(
+    "Select stocks to compare",
+    list(stock_dict.keys())
+)
+
+if compare_stocks:
+    tickers = [stock_dict[s] for s in compare_stocks]
+    comp_data = yf.download(tickers, period="1y", progress=False)
+
+    if comp_data is None or comp_data.empty:
+        st.warning("⚠ Comparison data not available")
+    else:
+        try:
+            comp_close = comp_data['Close']
+
+            if len(compare_stocks) == 1:
+                comp_close = comp_close.to_frame(name=compare_stocks[0])
+
+            st.line_chart(comp_close)
+
+        except:
+            st.warning("⚠ Error displaying comparison")
 
 # -------------------------------
 # ML Model
@@ -148,7 +176,7 @@ def run_dashboard():
 
     latest = live_data.iloc[-1]
 
-    # FIXED FLOAT ISSUE
+    # FIX: Safe float conversion
     current_price = latest['Close']
     if hasattr(current_price, "values"):
         current_price = current_price.values[0]
@@ -166,19 +194,34 @@ def run_dashboard():
     else:
         st.error("📉 SELL Signal")
 
-    # Trend
+    # -------------------------------
+    # 📉 Trend (FIXED)
+    # -------------------------------
     st.subheader("📉 Trend")
 
     close = live_data['Close'].dropna()
 
-    color = "green" if close.iloc[-1] > close.iloc[0] else "red"
+    # FIX: Convert to scalar safely
+    last = close.iloc[-1]
+    first = close.iloc[0]
+
+    if hasattr(last, "values"):
+        last = last.values[0]
+    if hasattr(first, "values"):
+        first = first.values[0]
+
+    color = "green" if last > first else "red"
+
+    values = close.values
+    if len(values.shape) > 1:
+        values = values.flatten()
 
     fig2, ax2 = plt.subplots()
-    ax2.plot(close.index, close.values, color=color)
+    ax2.plot(close.index, values, color=color)
     st.pyplot(fig2)
 
 # -------------------------------
-# AUTO LOAD
+# AUTO LOAD + REFRESH
 # -------------------------------
 run_dashboard()
 
