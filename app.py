@@ -25,6 +25,15 @@ selected_stock = st.selectbox("Select Stock", list(stock_dict.keys()))
 ticker = stock_dict[selected_stock]
 
 # -------------------------------
+# Helper: SAFE FLOAT CONVERSION
+# -------------------------------
+def safe_float(val):
+    try:
+        return float(val)
+    except:
+        return float(val.values[0])
+
+# -------------------------------
 # Load Data
 # -------------------------------
 @st.cache_data
@@ -58,7 +67,7 @@ plt.tight_layout()
 st.pyplot(fig)
 
 # -------------------------------
-# Compare Stocks
+# 📊 Compare Stocks (WORKING)
 # -------------------------------
 st.subheader("📊 Compare Stocks")
 
@@ -71,9 +80,7 @@ if compare_stocks:
     tickers = [stock_dict[s] for s in compare_stocks]
     comp_data = yf.download(tickers, period="1y", progress=False)
 
-    if comp_data is None or comp_data.empty:
-        st.warning("⚠ Comparison data not available")
-    else:
+    if comp_data is not None and not comp_data.empty:
         try:
             comp_close = comp_data['Close']
 
@@ -84,6 +91,8 @@ if compare_stocks:
 
         except:
             st.warning("⚠ Error displaying comparison")
+    else:
+        st.warning("⚠ No comparison data")
 
 # -------------------------------
 # ML Model
@@ -105,7 +114,7 @@ st.subheader("🤖 Model Accuracy")
 st.write(round(accuracy, 4))
 
 # -------------------------------
-# Top Recommended Stock
+# 🏆 Top Recommended Stock
 # -------------------------------
 st.subheader("🏆 Top Recommended Stock")
 
@@ -121,14 +130,10 @@ def get_best_stock():
 
             latest = df.iloc[-1]
 
-            current_price = latest['Close']
-            try:
-                current_price = float(current_price)
-            except:
-                    current_price = float(current_price.values[0])
+            current = safe_float(latest['Close'])
+
             features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
-            prediction = model.predict(features)
-            prediction = float(prediction[0])
+            prediction = float(model.predict(features)[0])
 
             profit = prediction - current
             results.append((name, current, prediction, profit))
@@ -165,7 +170,7 @@ if st.button("🔍 Find Best Stock"):
         st.write(f"Expected Gain: ₹ {round(profit,2)}")
 
 # -------------------------------
-# Live Dashboard
+# ⚡ Live Dashboard (FULLY FIXED)
 # -------------------------------
 st.subheader("⚡ Live Dashboard")
 
@@ -178,7 +183,9 @@ def run_dashboard():
 
     latest = live_data.iloc[-1]
 
-    current_price = float(latest['Close'])
+    # ✅ FIXED HERE (NO ERROR NOW)
+    current_price = safe_float(latest['Close'])
+
     features = latest[['Open','High','Low','Close','Volume']].values.reshape(1,-1)
     prediction = float(model.predict(features)[0])
 
@@ -191,30 +198,24 @@ def run_dashboard():
         st.error("📉 SELL Signal")
 
     # -------------------------------
-    # CLEAN TREND GRAPH (FIXED UI)
+    # 📉 CLEAN TREND GRAPH
     # -------------------------------
     st.subheader("📉 Trend")
 
     close = live_data['Close'].dropna()
 
-    last = float(close.iloc[-1])
-    first = float(close.iloc[0])
+    last = safe_float(close.iloc[-1])
+    first = safe_float(close.iloc[0])
 
     color = "green" if last > first else "red"
 
     fig2, ax2 = plt.subplots()
     ax2.plot(close.index, close.values, color=color, linewidth=2)
 
-    # ✅ Clean date formatting
     ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
 
     plt.xticks(rotation=45)
-
-    ax2.set_title("Price Trend")
-    ax2.set_xlabel("Date")
-    ax2.set_ylabel("Price")
-
     plt.tight_layout()
 
     st.pyplot(fig2)
